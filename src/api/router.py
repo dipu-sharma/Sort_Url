@@ -50,13 +50,8 @@ async def url_clicks(request: Request, db: Session = Depends(get_db)):
     Shows all short URLs with their click counts AND
     increments count for the current accessed URL
     """
-    # 1. Get the current accessed URL path
     current_path = request.url.path
-    
-    # 2. Find if this matches any short URL
     short_url = db.query(SortUrls).filter(SortUrls.short_url == current_path.strip('/')).first()
-    
-    # 3. If it's a short URL, increment its count
     if short_url:
         click = db.query(Clicks).filter(Clicks.sort_url_id == short_url.id).first()
         
@@ -71,8 +66,7 @@ async def url_clicks(request: Request, db: Session = Depends(get_db)):
             )
             db.add(click)
         db.commit()
-    
-    # 4. Return all URLs with their counts (regardless of whether current URL was a short one)
+
     all_urls = db.query(SortUrls).all()
     result = []
     
