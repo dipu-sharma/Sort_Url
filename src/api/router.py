@@ -44,40 +44,39 @@ async def update_long_url(slug: str, new_long_url: str, db: Session = Depends(ge
     return response
 
 
-@router.get("/")
-async def url_clicks(request: Request, db: Session = Depends(get_db)):
+@router.get("/short.ly/{short_code}")
+async def redirect_short_url(
+    short_code: str,
+    request: Request,
+    db: Session = Depends(get_db)
+):
     """
-    Shows all short URLs with their click counts AND
-    increments count for the current accessed URL
+    Redirects short URL to original URL and tracks clicks
     """
-    current_path = request.url.path
-    short_url = db.query(SortUrls).filter(SortUrls.short_url == current_path.strip('/')).first()
-    if short_url:
-        click = db.query(Clicks).filter(Clicks.sort_url_id == short_url.id).first()
-        
-        if click:
-            click.click_count += 1
-            click.last_clicked_at = datetime.now()
-        else:
-            click = Clicks(
-                sort_url_id=short_url.id,
-                click_count=1,
-                last_clicked_at=datetime.now()
-            )
-            db.add(click)
-        db.commit()
+    full_short_url = f"http://localhost:8000/short.ly/{short_code}"
 
-    all_urls = db.query(SortUrls).all()
-    result = []
+    short_url = db.query(SortUrls).filter(SortUrls.short_url == full_short_url).first()
     
-    for url in all_urls:
-        clicks = db.query(Clicks).filter(Clicks.sort_url_id == url.id).first()
-        result.append({
-            "short_url": url.short_url,
-            "click_count": clicks.click_count if clicks else 0,
-            "last_clicked_at": clicks.last_clicked_at if clicks else None
-        })
+    if not short_url:
+        raise HTTPException(status_code=404, detail="Short URL not found")
+    click = db.query(Clicks).filter(Clicks.sort_url_id == short_url.id).first()
     
-    return {"url_clicks": result}
+    if click:
+        click.click_count += 1
+        click.last_clicked_at = datetime.now()
+        db.commit()
+        db.refresh(click)
+    else:
+        print("No click found, creating a new one")
+        click = Clicks(
+            sort_url_id=short_url.id,
+            click_count= 1,
+            last_clicked_at=datetime.now()
+        )
+        db.add(click)
+        db.commit()
+        db.refresh(click)
+
+    return {"click_count": click.click_count, "last_clicked_at": click.last_clicked_at}
     
     
