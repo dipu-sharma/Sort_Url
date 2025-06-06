@@ -45,35 +45,45 @@ async def update_long_url(slug: str, new_long_url: str, db: Session = Depends(ge
 
 
 @router.get("/")
-async def url_clicks(request: Request, db:Session= Depends(get_db)):
+async def url_clicks(request: Request, db: Session = Depends(get_db)):
     """
-    Retrieves the number of clicks for each short URL.
+    Shows all short URLs with their click counts AND
+    increments count for the current accessed URL
     """
-    # # Store the number of clicks each short URL has received.
-
-    sort_urls = db.query(SortUrls).all()
-    get_request_url = request.url.path('/')
-    if get_request_url in sort_urls:
-        clicks = db.query(Clicks).filter(Clicks.sort_url_id == sort_urls.id).first()
-        if clicks:
-            return {
-                "short_url": sort_urls.short_url,
-                "click_count": clicks.click_count,
-                "last_clicked_at": clicks.last_clicked_at
-            }
+    # 1. Get the current accessed URL path
+    current_path = request.url.path
+    
+    # 2. Find if this matches any short URL
+    short_url = db.query(SortUrls).filter(SortUrls.short_url == current_path.strip('/')).first()
+    
+    # 3. If it's a short URL, increment its count
+    if short_url:
+        click = db.query(Clicks).filter(Clicks.sort_url_id == short_url.id).first()
+        
+        if click:
+            click.click_count += 1
+            click.last_clicked_at = datetime.now()
         else:
             click = Clicks(
-                sort_url_id=sort_urls.id,
-                click_count=clicks.click_count + 1 if clicks else 1,
+                sort_url_id=short_url.id,
+                click_count=1,
                 last_clicked_at=datetime.now()
             )
             db.add(click)
-            db.commit()
-            db.refresh(click)
-            return {
-                "short_url": sort_urls.short_url,
-                "click_count": click.click_count,
-                "last_clicked_at": click.last_clicked_at
-            }
+        db.commit()
+    
+    # 4. Return all URLs with their counts (regardless of whether current URL was a short one)
+    all_urls = db.query(SortUrls).all()
+    result = []
+    
+    for url in all_urls:
+        clicks = db.query(Clicks).filter(Clicks.sort_url_id == url.id).first()
+        result.append({
+            "short_url": url.short_url,
+            "click_count": clicks.click_count if clicks else 0,
+            "last_clicked_at": clicks.last_clicked_at if clicks else None
+        })
+    
+    return {"url_clicks": result}
     
     
